@@ -1,0 +1,33 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Admin</title>
+<style>*{box-sizing:border-box}body{font:15px system-ui,sans-serif;margin:0;background:#eef2f5;color:#16212b}main{max-width:960px;margin:auto;padding:16px}
+section{background:#fff;border-radius:6px;padding:16px;margin:0 0 16px}input,select,textarea{font:inherit;padding:8px;margin:4px 0;border:1px solid #b9c4cd;border-radius:4px;width:100%}
+button{font:inherit;padding:8px 14px;background:#0f766e;color:#fff;border:0;border-radius:4px;cursor:pointer;margin:4px 0}
+.t{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border-bottom:1px solid #dde3e8;text-align:left;white-space:nowrap}</style>
+<main id=m></main>
+<script>
+let T=sessionStorage.t||'',R=[];const $=i=>document.getElementById(i);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=(u,M='GET',b)=>fetch('/api/admin/'+u,{method:M,headers:{'Content-Type':'application/json','x-token':T},body:b&&JSON.stringify(b)}).then(r=>r.ok?r.json():Promise.reject(r));
+const tbl=(h,rows)=>`<div class=t><table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${String(c).startsWith('<button')?c:esc(c)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+function loginUI(){$('m').innerHTML=`<section><h2>Admin login</h2><input id=p type=password placeholder=Password><button onclick=login()>Log in</button><p id=e></p></section>`}
+async function login(){const r=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('p').value})}).then(r=>r.json());
+if(!r.token)return $('e').textContent=r.error;T=sessionStorage.t=r.token;ui()}
+async function ui(){let s,q,l;try{[s,q,R,l]=await Promise.all(['settings','questions','results','leaderboard'].map(u=>api(u)))}catch{T='';return loginUI()}
+$('m').innerHTML=`<section><h2>Test settings</h2><label>Total time (minutes)</label><input id=min type=number value=${s.minutes}>
+<label>Questions per section (one per line, like Quant: 10)</label><textarea id=cnt rows=4>${Object.entries(s.counts).map(([k,v])=>k+': '+v).join('\n')}</textarea><button onclick=saveS()>Save settings</button></section>
+<section><h2>Add a question</h2><input id=sec placeholder="Section (for example Quant)"><textarea id=tx rows=2 placeholder="Question (use $...$ for math)"></textarea><input id=im placeholder="Image URL (optional)">
+<input id=o0 placeholder="Option A"><input id=o1 placeholder="Option B"><input id=o2 placeholder="Option C"><input id=o3 placeholder="Option D">
+<select id=an><option value=0>Correct answer: A<option value=1>Correct answer: B<option value=2>Correct answer: C<option value=3>Correct answer: D</select><textarea id=ex rows=2 placeholder=Explanation></textarea><button onclick=addQ()>Add question</button></section>
+<section><h2>Upload questions</h2><p>CSV columns: section, question, image, a, b, c, d, answer (A to D), explanation. From Excel, use Save As CSV.</p><input type=file id=fl accept=.csv><button onclick=up()>Upload CSV</button></section>
+<section><h2>Leaderboard (best score per email)</h2>${tbl(['Rank','Name','Email','Best score'],l.map((x,i)=>[i+1,x.name,x.email,x.score+'/'+x.total]))}</section>
+<section><h2>Results</h2><input id=sq placeholder="Search name or email" oninput=rs()><button onclick=exp()>Export CSV</button><div id=rt></div></section>
+<section><h2>Questions (${q.length})</h2>${tbl(['Section','Question',''],q.map(x=>[x.section,x.text.slice(0,70),`<button onclick="del('${x.id}')">Delete</button>`]))}</section>`;rs()}
+function rs(){const f=$('sq').value.toLowerCase();$('rt').innerHTML=tbl(['Name','Email','Score','Sections','Tab switches','Ended by','Date'],
+R.filter(x=>(x.name+x.email).toLowerCase().includes(f)).map(x=>[x.name,x.email,x.score+'/'+x.total,Object.entries(x.by).map(([k,v])=>k+' '+v.c+'/'+v.t).join(', '),x.switches,x.reason,new Date(x.at).toLocaleString()]))}
+async function saveS(){const counts={};$('cnt').value.split('\n').forEach(l=>{const[k,n]=l.split(':');if(k&&k.trim()&&+n>0)counts[k.trim()]=+n});await api('settings','PUT',{minutes:+$('min').value||45,counts});alert('Settings saved')}
+async function addQ(){await api('questions','POST',{section:$('sec').value,text:$('tx').value,image:$('im').value,options:[0,1,2,3].map(i=>$('o'+i).value),answer:$('an').value,explanation:$('ex').value});ui()}
+async function up(){const f=$('fl').files[0];if(!f)return;const r=await api('upload','POST',{csv:await f.text()});alert(r.added+' questions added');ui()}
+async function del(id){if(confirm('Delete this question?')){await api('questions/'+id,'DELETE');ui()}}
+function exp(){fetch('/api/admin/export',{headers:{'x-token':T}}).then(r=>r.blob()).then(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='results.csv';a.click()})}
+T?ui():loginUI();
+</script>

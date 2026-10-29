@@ -1,0 +1,51 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Aptitude Test</title>
+<link rel=stylesheet href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:#eef2f5;color:#16212b}
+.card{background:#fff;max-width:720px;margin:20px auto;padding:20px;border-radius:6px}
+input:not([type=radio]){width:100%;padding:10px;margin:6px 0;border:1px solid #b9c4cd;border-radius:4px;font:inherit}
+button{font:inherit;padding:8px 14px;border:1px solid #0f766e;background:#fff;color:#0f766e;border-radius:4px;cursor:pointer}
+#f button,nav .on,.pal .on{background:#0f766e;color:#fff}
+header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 16px;background:#16212b;color:#fff;position:sticky;top:0}
+nav{display:flex;gap:8px;padding:10px 16px;flex-wrap:wrap;max-width:720px;margin:auto}
+.pal{display:flex;gap:6px;flex-wrap:wrap;max-width:720px;margin:auto;padding:0 16px}.pal button{width:40px;padding:6px 0}.pal .done{background:#cfe8e4}
+label{display:block;padding:10px;border:1px solid #cdd6dd;border-radius:4px;margin:8px 0;cursor:pointer}label.pick{border-color:#0f766e;background:#e6f4f1}
+img{max-width:100%}.nav{display:flex;justify-content:space-between;margin-top:12px}
+.rv{border-top:1px solid #dde3e8;padding:8px 0 8px 10px}.ok{border-left:4px solid #0f766e}.no{border-left:4px solid #b42318}.q{font-size:18px}
+</style>
+<div id=app></div>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),app=$('#app');let A,Q=[],ans={},cur=0,sw=0,end=0,iv;
+const api=(u,b)=>fetch('/api/'+u,b&&{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());
+const m=()=>window.renderMathInElement&&renderMathInElement(app,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function login(){app.innerHTML=`<form class=card id=f><h1>Aptitude test</h1><p>Enter your name and email to begin. If you were interrupted, use the same email to continue.</p><input id=n placeholder="Full name" required><input id=e type=email placeholder="Email" required><button>Start test</button><p id=err></p></form>`;
+$('#f').onsubmit=async ev=>{ev.preventDefault();const r=await api('start',{name:$('#n').value,email:$('#e').value});if(r.error)return $('#err').textContent=r.error;localStorage.aid=r.id;load(r.id)}}
+async function load(id){const r=await api('attempt/'+id);if(r.error)return login();if(r.done)return result(id);
+A=id;Q=r.questions;ans=r.answers;sw=r.switches;end=Date.now()+r.left;cur=0;test();tick()}
+function test(){const q=Q[cur],secs=[...new Set(Q.map(x=>x.section))];
+app.innerHTML=`<header><b id=t></b><span>Tab switches: ${sw} of 3</span><button id=sub>Submit test</button></header>
+<nav>${secs.map(s=>`<button class="${s==q.section?'on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join('')}</nav>
+<div class=pal>${Q.map((x,i)=>x.section==q.section?`<button class="${i==cur?'on':''} ${ans[x.id]!=null?'done':''}" data-i=${i}>${i+1}</button>`:'').join('')}</div>
+<div class=card><p class=q>${esc(q.text)}</p>${q.image?`<img src="${esc(q.image)}">`:''}
+${q.options.map((o,i)=>`<label class="${ans[q.id]===i?'pick':''}"><input type=radio name=o data-o=${i} ${ans[q.id]===i?'checked':''}> ${esc(o)}</label>`).join('')}
+<div class=nav><button id=pv>Previous</button><button id=nx>Next</button></div></div>`;m()}
+function tick(){clearInterval(iv);iv=setInterval(async()=>{const l=end-Date.now(),t=$('#t');if(t)t.textContent=new Date(Math.max(l,0)).toISOString().substr(11,8);if(l<=0)finish()},500)}
+const persist=()=>api('attempt/'+A+'/save',{answers:ans,switches:sw}).then(r=>r.done&&result(A));
+async function finish(){const id=A;if(!id)return;clearInterval(iv);A=null;await api('attempt/'+id+'/submit',{answers:ans});result(id)}
+app.onclick=e=>{const b=e.target.closest('button');if(!b||!A)return;
+if(b.dataset.s)cur=Q.findIndex(x=>x.section==b.dataset.s);else if(b.dataset.i)cur=+b.dataset.i;
+else if(b.id=='nx'){if(Q[cur+1])cur++}else if(b.id=='pv'){if(cur>0)cur--}
+else if(b.id=='sub'){if(confirm('Submit the test now?'))finish();return}else return;test()};
+app.onchange=e=>{const o=e.target.dataset.o;if(o==null||!A)return;ans[Q[cur].id]=+o;persist();test()};
+document.addEventListener('visibilitychange',async()=>{if(document.hidden||!A)return;sw++;const id=A,r=await api('attempt/'+id+'/save',{answers:ans,switches:sw});
+if(r.done){A=null;clearInterval(iv);alert('You switched tabs 3 times, so your test was submitted.');return result(id)}
+alert(`Warning ${sw} of 3: you left this tab. The test submits automatically after 3.`);test()});
+async function result(id){A=null;clearInterval(iv);localStorage.removeItem('aid');const r=await api('attempt/'+id+'/result');
+app.innerHTML=`<div class=card><h1>Your score: ${r.score} / ${r.total}</h1><p>${Object.entries(r.by).map(([s,v])=>`${esc(s)}: ${v.c}/${v.t}`).join(', ')}</p>
+${r.review.map((q,i)=>`<div class="rv ${q.ok?'ok':'no'}"><p>${i+1}. ${esc(q.text)}</p><p>Your answer: ${q.mine==null?'Not answered':esc(q.options[q.mine])}</p><p>Correct answer: ${esc(q.options[q.answer])}</p><p>${esc(q.explanation||'')}</p></div>`).join('')}
+<p><button onclick="login()">Take it again</button></p></div>`;m()}
+localStorage.aid?load(localStorage.aid):login();
+</script>

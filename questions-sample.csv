@@ -1,0 +1,4 @@
+section,question,image,a,b,c,d,answer,explanation
+Quant,"What is $12\times 15$?",,150,180,160,170,B,"$12 \times 15 = 180$."
+Logical,"Find the next number: 2, 6, 12, 20, ?",,28,30,32,36,B,"The differences grow by 2 (4, 6, 8, 10), so the next number is 30."
+Verbal,"Choose the word closest in meaning to ""brief"".",,Short,Wide,Heavy,Late,A,"Brief means short in duration."
